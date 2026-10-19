@@ -459,7 +459,7 @@ int handle_versions(int tcp_fd, user logged_user, const char *filename) {
             n = read(tcp_fd, &c, 1);
             if (n == -1) return 1;
             if (n == 0 || c == '\n') {
-                break; // End of line reached
+                break;
             }
 
             if (buf_idx < MAX_BUFFER - 1) {
@@ -468,7 +468,6 @@ int handle_versions(int tcp_fd, user logged_user, const char *filename) {
             }
 
             int chars_read = 0;
-            // Check if we have successfully parsed a full peer entry ending in AVL or NAV
             if (sscanf(buffer, "%s %ld %s %s %s%n", 
                        peer.uid, &peer.fsize, peer.label, 
                        peer.pub_time, peer.availability, &chars_read) == 5) {
@@ -489,8 +488,6 @@ int handle_versions(int tcp_fd, user logged_user, const char *filename) {
                     } else {
                         printf("Availability: Not Available\n");
                     }
-
-                    // Shift remaining characters (if any spaces/next peer started) back to the start of the buffer
                     int remaining = buf_idx - chars_read;
                     if (remaining > 0) {
                         memmove(buffer, buffer + chars_read, remaining);
