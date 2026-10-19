@@ -427,6 +427,91 @@ int list_files(connection conn, struct addrinfo *res, user logged_user, int peer
     return 0;
 }
 
+
+int handle_versions(int tcp_fd, user logged_user, const char *filename) {
+    char message[MAX_BUFFER];
+    char buffer[MAX_BUFFER];
+    char c;
+    int n;
+
+    if(!verify_filename(filename)){
+        close(tcp_fd);
+        return 1;
+    }
+
+    snprintf(message, sizeof(message), "VRS %s\n", filename);
+    write(tcp_fd, message, strlen(message));
+
+    n = read(tcp_fd, buffer, 7);
+    if (n == -1) return 1; //maybe por um signal idk
+    buffer[n] = '\0';
+
+    char status[4];
+    sscanf(buffer, "%*s %s", status);
+
+    if (strcmp(status, "OK") == 0) {
+        printf("List of peers available:\n");
+        PeerInfo peer;
+        int count = 0;
+        int buf_idx = 0; // reset buffer for peer data parsing
+
+        while (1) {
+            n = read(tcp_fd, &c, 1);
+            if (n == -1) return 1;
+            if (n == 0 || c == '\n') {
+                break; // End of line reached
+            }
+
+            if (buf_idx < MAX_BUFFER - 1) {
+                buffer[buf_idx++] = c;
+                buffer[buf_idx] = '\0';
+            }
+
+            int chars_read = 0;
+            // Check if we have successfully parsed a full peer entry ending in AVL or NAV
+            if (sscanf(buffer, "%s %ld %s %s %s%n", 
+                       peer.uid, &peer.fsize, peer.label, 
+                       peer.pub_time, peer.availability, &chars_read) == 5) {
+                
+                if (strcmp(peer.availability, "AVL") == 0 || strcmp(peer.availability, "NAV") == 0) {
+                    count++;
+                    printf("%d.-----------------------------\n", count);
+                    printf("Peer UID: %s\n", peer.uid);
+                    printf("File Size: %ld bytes\n", peer.fsize);
+                    printf("Label: %s\n", peer.label);
+                    
+                    int year, month, day, hour, min, sec;
+                    sscanf(peer.pub_time, "%4d%2d%2d-%2d%2d%2d", &year, &month, &day, &hour, &min, &sec);
+                    printf("Publication Time: %04d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, min, sec);
+                    
+                    if (strcmp(peer.availability, "AVL") == 0) {
+                        printf("Availability: Available\n");
+                    } else {
+                        printf("Availability: Not Available\n");
+                    }
+
+                    // Shift remaining characters (if any spaces/next peer started) back to the start of the buffer
+                    int remaining = buf_idx - chars_read;
+                    if (remaining > 0) {
+                        memmove(buffer, buffer + chars_read, remaining);
+                        buf_idx = remaining;
+                    } else {
+                        buf_idx = 0;
+                    }
+                    buffer[buf_idx] = '\0';
+                }
+            }
+        }
+        printf("-----------------------------\n");
+    } else if (strcmp(status, "NOK") == 0){
+        printf("no peer available for such resource\n"); 
+    } else if(strcmp(status, "ERR") == 0){
+        printf("error");
+    }
+
+}
+
+/** 
 int handle_versions(int tcp_fd, user logged_user, const char *filename){
     char buffer[MAX_BUFFER];
     char message[MAX_BUFFER];        
@@ -439,7 +524,7 @@ int handle_versions(int tcp_fd, user logged_user, const char *filename){
         return 1;
     }
 
-    snprintf(message, sizeof(buffer), "VRS %s\n", filename);
+    snprintf(message, sizeof(message), "VRS %s\n", filename);
     write(tcp_fd, message, strlen(message));
 
     while(bytes_read < MAX_BUFFER -1){
@@ -491,6 +576,7 @@ int handle_versions(int tcp_fd, user logged_user, const char *filename){
     }
     return 0; 
 }
+*/
 
 void read_command(connection conn, struct addrinfo *res, int peerport, const char *ip, const char *port){
     char command[MAX_CMD];

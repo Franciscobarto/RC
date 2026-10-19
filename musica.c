@@ -11,6 +11,6 @@ int main(){
     printf("chicken and macaroni\n");
     sleep(2);
     printf("chilling with my homies\n");
-    sleep(30);
+    sleep(5);
     return 0;
 }
