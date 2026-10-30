@@ -1,6 +1,7 @@
 #include "estruturas.h"
 #include "utils.h"
 #include "parser.h"
+#include "connections.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,50 +16,6 @@ sig_atomic_t keep_running = 1;
 void sigint_handler(int sig){
     (void) sig;
     keep_running = 0;
-}
-
-void server_connect_UDP(connection *conn, struct addrinfo **res, const char *ip, const char *port) {
-    struct addrinfo hints;
-    struct timeval tv;
-    tv.tv_sec = 5;
-    tv.tv_usec = 0; 
-
-    conn->fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (conn->fd ==-1) exit(1);
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-
-    if (getaddrinfo(ip, port, &hints, res) != 0) exit(1);
-
-    if (setsockopt(conn->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-        perror("setsockopt failed");
-    }
-}
-
-int server_connect_TCP(const char *ip, const char *port){
-    int fd, errcode;
-    struct addrinfo hints, *res;
-    ssize_t n;
-
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == -1) exit(1);
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    errcode = getaddrinfo(ip, port, &hints, &res);
-    if(errcode != 0) exit(1);
-
-    n = connect(fd, res->ai_addr, res->ai_addrlen);
-    if(n == -1) {
-        freeaddrinfo(res);
-        exit(1);
-    }
-    freeaddrinfo(res);
-    return fd;
 }
 
 int get_flags(int argc,char *argv[], int *peerport, char *ip, char *port){

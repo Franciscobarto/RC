@@ -8,13 +8,20 @@
 #include <errno.h>
 #include <sys/stat.h>   
 
-int handle_login(connection conn, struct addrinfo *res, user temp_user, int peerport, int *is_logged_in) {
+int server_connect_TCP(const char *ip, const char *port);
+
+int handle_login(connection conn, struct addrinfo *res, int peerport, const char *id, const char *password, user *logged_user, int *is_logged_in) {
     char buffer[MAX_BUFFER];
     ssize_t n;
 
-    if (!verify_uid(get_id(&temp_user)) || !verify_password(get_password(&temp_user))) return 1;
+    if (*is_logged_in) {
+        printf("already logged in\n");
+        return 1;
+    }
 
-    snprintf(buffer, sizeof(buffer), "LIN %s %s %d\n", get_id(&temp_user), get_password(&temp_user), peerport);
+    if (!verify_uid(id) || !verify_password(password)) return 1;
+
+    snprintf(buffer, sizeof(buffer), "LIN %s %s %d\n", id, password, peerport);
     if (sendto(conn.fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen) == -1) exit(1);
 
     conn.addrlen = sizeof(conn.addr);
@@ -46,12 +53,22 @@ int handle_login(connection conn, struct addrinfo *res, user temp_user, int peer
         printf("unexpected server response\n");
     }
 
+    if (*is_logged_in) {
+        set_id(logged_user, id);
+        set_password(logged_user, password);
+    }
+
     return 0;
 }
 
 int handle_logout(connection conn, struct addrinfo *res, user logged_user, int *is_logged_in) {
     char buffer[MAX_BUFFER];
     ssize_t n;
+
+    if (!*is_logged_in) {
+        printf("user not logged in\n");
+        return 1;
+    }
 
     snprintf(buffer, sizeof(buffer), "LOU %s %s\n", get_id(&logged_user), get_password(&logged_user));
     if(sendto(conn.fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen) == -1) exit(1);
@@ -91,6 +108,11 @@ int handle_unregister(connection conn, struct addrinfo *res, user logged_user, i
     char buffer[MAX_BUFFER];
     ssize_t n;
 
+    if (!*is_logged_in) {
+        printf("user not logged in/registered\n");
+        return 1;
+    }
+
     snprintf(buffer, sizeof(buffer), "UNR %s %s\n", get_id(&logged_user), get_password(&logged_user));
     if(sendto(conn.fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen) == -1) exit(1);
 
@@ -125,10 +147,15 @@ int handle_unregister(connection conn, struct addrinfo *res, user logged_user, i
     return 0; 
 }
 
-int publish_resource(connection conn, struct addrinfo *res, user logged_user, const char *filename, const char *label){
+int publish_resource(connection conn, struct addrinfo *res, user logged_user, int *is_logged_in, const char *filename, const char *label){
     char buffer[MAX_BUFFER];
     ssize_t n;
     struct stat file_stat;
+
+    if (!*is_logged_in) {
+        printf("user not logged in\n");
+        return 1;
+    }
 
     if (!verify_filename(filename) || !verify_label(label)) return 1;
 
@@ -173,9 +200,14 @@ int publish_resource(connection conn, struct addrinfo *res, user logged_user, co
     return 0; 
 }
 
-int remove_resource(connection conn, struct addrinfo *res, user logged_user, const char *filename){
+int remove_resource(connection conn, struct addrinfo *res, user logged_user, int *is_logged_in, const char *filename){
     char buffer[MAX_BUFFER];
     ssize_t n;
+
+    if (!*is_logged_in) {
+        printf("user not logged in\n");
+        return 1;
+    }
 
     if (!verify_filename(filename)) return 1;
 
@@ -262,19 +294,26 @@ int list_files(connection conn, struct addrinfo *res){
 }
 
 
-int handle_versions(int tcp_fd, const char *filename) {
+int list_versions(const char *ip, const char *port, const char *filename) {
     char message[MAX_BUFFER];
-    char buffer[MAX_BUFFER];
-    char c;
-    int n;
 
-    if(!verify_filename(filename)){
-        close(tcp_fd);
-        return 1;
-    }
+    if(!verify_filename(filename)) return 1;
+
+    int tcp_fd = server_connect_TCP(ip, port);
 
     snprintf(message, sizeof(message), "VRS %s\n", filename);
     write(tcp_fd, message, strlen(message));
+
+    read_list_versions(tcp_fd);
+
+    return 0;
+
+}
+
+int read_list_versions(int tcp_fd) {
+    char buffer[MAX_BUFFER];
+    char c;
+    int n;
 
     n = read(tcp_fd, buffer, 7);
     if (n == -1) return 1; //maybe por um signal idk
@@ -338,11 +377,13 @@ int handle_versions(int tcp_fd, const char *filename) {
             }
         }
         printf("-----------------------------\n");
+
     } else if (strcmp(status, "NOK") == 0){
         printf("no peer available for such resource\n"); 
+
     } else if(strcmp(status, "ERR") == 0){
         printf("error");
     }
-    return 0;
 
+    return 0;
 }
